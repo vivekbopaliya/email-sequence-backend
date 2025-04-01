@@ -1,10 +1,35 @@
 import { NextFunction, Request, Response } from 'express';
 import { WorkflowSchema } from '../types/workflow-type';
-import { cancelScheduledEmails,  scheduleEmailsForWorkflow } from '../services/email-service';
+import { cancelScheduledEmails, scheduleEmailsForWorkflow } from '../services/email-service';
 import { ZodError } from 'zod';
 import { db } from '../lib/db';
 
-export const createWorkflow = async (
+export const saveWorkflow = async (
+  req: Request & { user: { id: string; email: string } },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const validatedData = WorkflowSchema.parse(req.body);
+
+    const flow = await db.flow.create({
+      data: {
+        ...validatedData,
+        userId: req.user.id,
+      },
+    });
+
+    res.status(201).json(flow);
+  } catch (error) {
+    console.error('Error saving workflow: ', error);
+    if (error instanceof ZodError) {
+      return res.status(400).json({ message: 'Please provide valid data.' });
+    }
+    res.status(500).json({ message: 'Internal Server Error.' });
+  }
+};
+
+export const saveAndStartWorkflow = async (
   req: Request & { user: { id: string; email: string } },
   res: Response,
   next: NextFunction
@@ -28,16 +53,18 @@ export const createWorkflow = async (
 
     res.status(201).json(flow);
   } catch (error) {
-    console.error('Error creating workflow: ', error);
+    console.error('Error saving and starting workflow: ', error);
     if (error instanceof ZodError) {
       return res.status(400).json({ message: 'Please provide valid data.' });
     }
     res.status(500).json({ message: 'Internal Server Error.' });
   }
 };
-export const getAllWorkflows = async (req: Request & {
-  user: { id: string }
-}, res: Response) => {
+
+export const getAllWorkflows = async (
+  req: Request & { user: { id: string } },
+  res: Response
+) => {
   try {
     const flows = await db.flow.findMany({
       where: { userId: req.user.id },
@@ -48,9 +75,10 @@ export const getAllWorkflows = async (req: Request & {
   }
 };
 
-export const getOneWorkflow = async (req: Request & {
-  user: { id: string }
-}, res: Response) => {
+export const getOneWorkflow = async (
+  req: Request & { user: { id: string } },
+  res: Response
+) => {
   try {
     const flow = await db.flow.findFirst({
       where: {
@@ -91,22 +119,10 @@ export const updateWorkflow = async (
       });
     }
 
-    // Cancel existing scheduled emails
-    await cancelScheduledEmails(id);
-
-    // Update the workflow
     const updatedFlow = await db.flow.update({
       where: { id },
       data: validatedData,
     });
-
-    // Reschedule emails
-    await scheduleEmailsForWorkflow(
-      validatedData.nodes as any[],
-      validatedData.edges as any[],
-      req.user.email,
-      id
-    );
 
     res.status(200).json(updatedFlow);
   } catch (error) {
@@ -121,6 +137,91 @@ export const updateWorkflow = async (
   }
 };
 
+export const updateAndStartWorkflow = async (
+  req: Request & { user: { id: string; email: string } },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+    const validatedData = WorkflowSchema.parse(req.body);
+
+    const existingFlow = await db.flow.findFirst({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
+
+    if (!existingFlow) {
+      return res.status(404).json({
+        message: 'Workflow not found or you do not have permission to update it',
+      });
+    }
+
+    await cancelScheduledEmails(id);
+
+    const updatedFlow = await db.flow.update({
+      where: { id },
+      data: validatedData,
+    });
+
+    await scheduleEmailsForWorkflow(
+      validatedData.nodes as any[],
+      validatedData.edges as any[],
+      req.user.email,
+      id
+    );
+
+    res.status(200).json(updatedFlow);
+  } catch (error) {
+    console.error('Error updating and starting workflow:', error);
+    if (error instanceof ZodError) {
+      return res.status(400).json({
+        message: 'Please provide valid data.',
+        errors: error.errors,
+      });
+    }
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+export const startScheduler = async (
+  req: Request & { user: { id: string; email: string } },
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id } = req.params;
+
+    const flow = await db.flow.findFirst({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
+
+    if (!flow) {
+      return res.status(404).json({
+        message: 'Workflow not found or you do not have permission to start it',
+      });
+    }
+
+    await cancelScheduledEmails(id);
+
+    await scheduleEmailsForWorkflow(
+      flow.nodes as any[],
+      flow.edges as any[],
+      req.user.email,
+      id
+    );
+
+    res.status(200).json({ message: 'Scheduler started successfully.' });
+  } catch (error) {
+    console.error('Error while starting the scheduler:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
 
 export const deleteWorkflow = async (
   req: Request & { user: { id: string } },

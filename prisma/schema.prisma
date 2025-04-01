@@ -29,7 +29,6 @@ model Flow {
 
 model EmailSchedule {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  flowId    String   @db.ObjectId
   email     String
   subject   String
   body      String

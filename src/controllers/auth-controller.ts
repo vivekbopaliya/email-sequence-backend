@@ -1,26 +1,26 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { LoginSchema, RegisterSchema } from '../types/auth-type';
+import { ZodError } from 'zod';
+import { db } from '../lib/db';
 
-const prisma = new PrismaClient();
 
 export const register = async (req: Request, res: Response) => {
   try {
     const validatedData = RegisterSchema.parse(req.body);
     
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { email: validatedData.email },
     });
 
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(401).json({ message: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(validatedData.password, 10);
 
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
         email: validatedData.email,
         password: hashedPassword,
@@ -39,7 +39,11 @@ export const register = async (req: Request, res: Response) => {
 
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
-    res.status(400).json({ message: 'Invalid input data' });
+    console.error('Error signing in: ', error);
+    if(error instanceof ZodError) {
+      return res.status(400).json({message: "Please provide valid data. "})
+    }
+    res.status(500).json({ message: 'Internal Server Error.' });
   }
 };
 
@@ -47,7 +51,7 @@ export const login = async (req: Request, res: Response) => {
   try {
     const validatedData = LoginSchema.parse(req.body);
 
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { email: validatedData.email },
     });
 
@@ -76,7 +80,11 @@ export const login = async (req: Request, res: Response) => {
 
     res.json({ message: 'Logged in successfully' });
   } catch (error) {
-    res.status(400).json({ message: 'Invalid input data' });
+    console.error('Error signing in: ', error);
+    if(error instanceof ZodError) {
+      return res.status(400).json({message: "Please provide valid data. "})
+    }
+    res.status(500).json({ message: 'Internal Server Error.' });
   }
 };
 

@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { db } from '../lib/db';
 
-const prisma = new PrismaClient();
 
-export const auth = async (req: Request, res: Response, next: NextFunction) => {
+export const auth = async (req: Request & {
+  user: any
+}, res: Response, next: NextFunction) => {
   try {
     const token = req.cookies.token;
 
@@ -13,7 +14,7 @@ export const auth = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!);
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { id: (decoded as any).userId },
     });
 

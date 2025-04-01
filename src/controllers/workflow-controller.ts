@@ -1,16 +1,17 @@
 import { NextFunction, Request, Response } from 'express';
 import { WorkflowSchema } from '../types/workflow-type';
-import { scheduleEmail } from '../services/email-service';
+import { cancelScheduledEmails,  scheduleEmailsForWorkflow } from '../services/email-service';
 import { ZodError } from 'zod';
 import { db } from '../lib/db';
 
-
-export const createWorkflow = async (req: Request & {
-  user: { id: string }
-}, res: Response, next: NextFunction)=> {
+export const createWorkflow = async (
+  req: Request & { user: { id: string; email: string } },
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const validatedData = WorkflowSchema.parse(req.body);
-    
+
     const flow = await db.flow.create({
       data: {
         ...validatedData,
@@ -18,40 +19,22 @@ export const createWorkflow = async (req: Request & {
       },
     });
 
-    const nodes = validatedData.nodes as any[];
-    const emailNodes = nodes.filter(node => node.type === 'coldEmail');
-    const delayNodes = nodes.filter(node => node.type === 'wait');
-
-    for (const emailNode of emailNodes) {
-      const connectedDelay = delayNodes.find(delay => 
-        validatedData.edges.some((edge: any) => 
-        edge.source === delay.id && edge.target === emailNode.id
-        )
-      );
-      console.log("connected delay: ", connectedDelay)
-
-      const delay = connectedDelay ? parseInt(connectedDelay.data.delay) : 0;
-      const sendAt = new Date(Date.now() + delay * 60 * 60 * 1000);
-
-      console.log("sent at", sendAt)
-      await scheduleEmail(
-        emailNode.data.email,
-        emailNode.data.subject,
-        emailNode.data.body,
-        sendAt
-      );
-    }
+    await scheduleEmailsForWorkflow(
+      validatedData.nodes as any[],
+      validatedData.edges as any[],
+      req.user.email,
+      flow.id
+    );
 
     res.status(201).json(flow);
   } catch (error) {
-    console.error('Error creating workflow  ', error);
-    if(error instanceof ZodError) {
-      return res.status(400).json({message: "Please provide valid data. "})
+    console.error('Error creating workflow: ', error);
+    if (error instanceof ZodError) {
+      return res.status(400).json({ message: 'Please provide valid data.' });
     }
     res.status(500).json({ message: 'Internal Server Error.' });
   }
 };
-
 export const getAllWorkflows = async (req: Request & {
   user: { id: string }
 }, res: Response) => {
@@ -87,14 +70,14 @@ export const getOneWorkflow = async (req: Request & {
 };
 
 export const updateWorkflow = async (
-  req: Request & { user: { id: string } }, 
-  res: Response, 
+  req: Request & { user: { id: string; email: string } },
+  res: Response,
   next: NextFunction
 ) => {
   try {
     const { id } = req.params;
     const validatedData = WorkflowSchema.parse(req.body);
-    
+
     const existingFlow = await db.flow.findFirst({
       where: {
         id,
@@ -103,45 +86,35 @@ export const updateWorkflow = async (
     });
 
     if (!existingFlow) {
-      return res.status(404).json({ message: 'Workflow not found or you do not have permission to update it' });
+      return res.status(404).json({
+        message: 'Workflow not found or you do not have permission to update it',
+      });
     }
-    
+
+    // Cancel existing scheduled emails
+    await cancelScheduledEmails(id);
+
+    // Update the workflow
     const updatedFlow = await db.flow.update({
       where: { id },
       data: validatedData,
     });
 
-    const nodes = validatedData.nodes as any[];
-    const emailNodes = nodes.filter(node => node.type === 'coldEmail');
-    const delayNodes = nodes.filter(node => node.type === 'wait');
-
-    for (const emailNode of emailNodes) {
-      const connectedDelay = delayNodes.find(delay => 
-        validatedData.edges.some((edge: any) => 
-          edge.source === delay.id && edge.target === emailNode.id
-        )
-      );
-
-      console.log("connected delay: ", connectedDelay)
-
-      const delay = connectedDelay ? parseInt(connectedDelay.data.delay) : 0;
-      const sendAt = new Date(Date.now() + delay * 60 * 60 * 1000);
-
-      await scheduleEmail(
-        emailNode.data.email,
-        emailNode.data.subject,
-        emailNode.data.body,
-        sendAt
-      );
-    }
+    // Reschedule emails
+    await scheduleEmailsForWorkflow(
+      validatedData.nodes as any[],
+      validatedData.edges as any[],
+      req.user.email,
+      id
+    );
 
     res.status(200).json(updatedFlow);
   } catch (error) {
     console.error('Error updating workflow:', error);
     if (error instanceof ZodError) {
-      return res.status(400).json({ 
-        message: "Please provide valid data.", 
-        errors: error.errors 
+      return res.status(400).json({
+        message: 'Please provide valid data.',
+        errors: error.errors,
       });
     }
     res.status(500).json({ message: 'Internal Server Error' });
@@ -150,13 +123,13 @@ export const updateWorkflow = async (
 
 
 export const deleteWorkflow = async (
-  req: Request & { user: { id: string } }, 
-  res: Response, 
+  req: Request & { user: { id: string } },
+  res: Response,
   next: NextFunction
 ) => {
   try {
     const { id } = req.params;
-    
+
     const existingFlow = await db.flow.findFirst({
       where: {
         id,
@@ -165,9 +138,13 @@ export const deleteWorkflow = async (
     });
 
     if (!existingFlow) {
-      return res.status(404).json({ message: 'Workflow not found or you do not have permission to delete it' });
+      return res.status(404).json({
+        message: 'Workflow not found or you do not have permission to delete it',
+      });
     }
-    
+
+    await cancelScheduledEmails(id);
+
     await db.flow.delete({
       where: { id },
     });

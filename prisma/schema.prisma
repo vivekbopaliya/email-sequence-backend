@@ -17,23 +17,23 @@ model User {
 }
 
 model Flow {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  name        String
-  nodes       Json
-  edges       Json
-  userId      String   @db.ObjectId
-  user        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  name            String
+  nodes           Json
+  edges           Json
+  scheduledEmails ScheduledEmail[]
+  userId          String           @db.ObjectId
+  user            User             @relation(fields: [userId], references: [id])
+  status          String           @default("RUNNING") // Options: PENDING, COMPLETED
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
-model EmailSchedule {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String
-  subject   String
-  body      String
-  sendAt    DateTime
-  sent      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model ScheduledEmail {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  flowId     String   @db.ObjectId
+  flow       Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  jobId      String 
+  sendAt     DateTime
+  createdAt  DateTime @default(now())
 }

@@ -16,12 +16,11 @@ class PrismaClientSingleton extends PrismaClient {
       log: process.env.NODE_ENV === "development" 
         ? ["query", "error", "warn"] 
         : ["error"],
-      // Configure connection timeout (optional)
-      // datasources: {
-      //   db: {
-      //     url: process.env.DATABASE_URL,
-      //   },
-      // },
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
     });
 
     this.isConnected = false;

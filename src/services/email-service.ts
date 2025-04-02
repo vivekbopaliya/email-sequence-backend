@@ -18,7 +18,6 @@ agenda.define('send email', async (job: Job) => {
   const { currentUserEmail, recipientUserEmail, subject, body, flowId } = job.attrs.data;
 
   try {
-    
     await transporter.sendMail({
       from: currentUserEmail,
       to: recipientUserEmail,
@@ -30,7 +29,7 @@ agenda.define('send email', async (job: Job) => {
     const pendingEmails = await db.scheduledEmail.count({
       where: {
         flowId,
-        sendAt: { gt: new Date() }, 
+        sendAt: { gt: new Date() },
       },
     });
 
@@ -67,13 +66,12 @@ export const scheduleEmail = async (
 
   const flow = await db.flow.findUnique({ where: { id: flowId } });
 
-  console.log("FLOW", flow)
   if (flow && flow.status !== 'RUNNING') {
     await db.flow.update({
       where: { id: flowId },
       data: { status: 'RUNNING' },
     });
-    console.log("FLOW RUNNING")
+    console.log('FLOW RUNNING');
   }
 
   return job.attrs._id.toString();
@@ -89,55 +87,58 @@ export const scheduleEmailsForWorkflow = async (
   const emailNodes = nodes.filter((node) => node.type === 'coldEmail');
 
   for (const leadSource of leadSourceNodes) {
-    const leadEmail = leadSource.data.email;
+    const contacts = leadSource.data.contacts || []; // Array of email addresses
 
-    for (const emailNode of emailNodes) {
-      let totalDelayMs = 0;
-      const pathToEmail = [];
-      let currentSource = leadSource.id;
+    for (const contact of contacts) {
+      for (const emailNode of emailNodes) {
+        let totalDelayMs = 0;
+        const pathToEmail = [];
+        let currentSource = leadSource.id;
 
-      while (true) {
-        const nextEdge = edges.find((edge) => edge.source === currentSource);
-        if (!nextEdge) break;
+        // Traverse the path from Lead Source to Cold Email
+        while (true) {
+          const nextEdge = edges.find((edge) => edge.source === currentSource);
+          if (!nextEdge) break;
 
-        const nextNode = nodes.find((node) => node.id === nextEdge.target);
-        if (!nextNode) break;
+          const nextNode = nodes.find((node) => node.id === nextEdge.target);
+          if (!nextNode) break;
 
-        if (nextNode.type === 'wait') {
-          const delay = nextNode.data.delay || { days: 0, hours: 0, minutes: 0 };
-          const delayMs =
-            (parseInt(delay.days) || 0) * 24 * 60 * 60 * 1000 +
-            (parseInt(delay.hours) || 0) * 60 * 60 * 1000 +
-            (parseInt(delay.minutes) || 0) * 60 * 1000;
-          totalDelayMs += delayMs;
-          pathToEmail.push(nextNode);
-        } else if (nextNode.id === emailNode.id) {
-          pathToEmail.push(nextNode);
-          break;
+          if (nextNode.type === 'wait') {
+            const delay = nextNode.data.delay || { days: 0, hours: 0, minutes: 0 };
+            const delayMs =
+              (parseInt(delay.days) || 0) * 24 * 60 * 60 * 1000 +
+              (parseInt(delay.hours) || 0) * 60 * 60 * 1000 +
+              (parseInt(delay.minutes) || 0) * 60 * 1000;
+            totalDelayMs += delayMs;
+            pathToEmail.push(nextNode);
+          } else if (nextNode.id === emailNode.id) {
+            pathToEmail.push(nextNode);
+            break;
+          }
+          currentSource = nextNode.id;
         }
-        currentSource = nextNode.id;
-      }
 
-      if (pathToEmail.some((node) => node.id === emailNode.id)) {
-        const sendAt = new Date(Date.now() + totalDelayMs);
-        console.log(`Scheduling email for ${leadEmail} at ${sendAt}`);
+        if (pathToEmail.some((node) => node.id === emailNode.id)) {
+          const sendAt = new Date(Date.now() + totalDelayMs);
+          console.log(`Scheduling email for ${contact} at ${sendAt}`);
 
-        const jobId = await scheduleEmail(
-          userEmail,
-          leadEmail,
-          emailNode.data.subject,
-          emailNode.data.body,
-          sendAt,
-          flowId
-        );
-
-        await db.scheduledEmail.create({
-          data: {
-            flowId,
-            jobId,
+          const jobId = await scheduleEmail(
+            userEmail,
+            contact,
+            emailNode.data.subject,
+            emailNode.data.body,
             sendAt,
-          },
-        });
+            flowId
+          );
+
+          await db.scheduledEmail.create({
+            data: {
+              flowId,
+              jobId,
+              sendAt,
+            },
+          });
+        }
       }
     }
   }

@@ -9,6 +9,7 @@ import {
   updateAndStartWorkflow,
   startScheduler,
   deleteWorkflow,
+  stopSchduler,
 } from '../controllers/workflow-controller';
 
 const router = Router();
@@ -25,6 +26,8 @@ router.patch('/update/:id', updateWorkflow);
 router.patch('/update-and-start/:id', updateAndStartWorkflow); 
 
 router.post('/start-scheduler/:id', startScheduler);
+router.post('/stop-scheduler/:id', stopSchduler);
+
 
 router.delete('/delete/:id', deleteWorkflow);
 

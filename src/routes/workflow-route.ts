@@ -14,21 +14,30 @@ import {
 
 const router = Router();
 
+// Protect all workflow routes with auth middleware
 router.use(auth);
 
-router.post('/save', saveWorkflow); 
-router.post('/save-and-start', saveAndStartWorkflow); 
+// Save a new workflow
+router.post('/save', saveWorkflow);
+// Save and run a workflow
+router.post('/save-and-start', saveAndStartWorkflow);
 
+// Fetch all workflows
 router.get('/getAll', getAllWorkflows);
+// Fetch one workflow by ID
 router.get('/get/:id', getOneWorkflow);
 
-router.patch('/update/:id', updateWorkflow); 
-router.patch('/update-and-start/:id', updateAndStartWorkflow); 
+// Update a workflow
+router.patch('/update/:id', updateWorkflow);
+// Update and run a workflow
+router.patch('/update-and-start/:id', updateAndStartWorkflow);
 
+// Start workflow scheduler
 router.post('/start-scheduler/:id', startScheduler);
+// Stop workflow scheduler
 router.post('/stop-scheduler/:id', stopSchduler);
 
-
+// Delete a workflow
 router.delete('/delete/:id', deleteWorkflow);
 
 export default router;

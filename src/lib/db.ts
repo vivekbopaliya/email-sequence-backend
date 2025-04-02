@@ -1,3 +1,5 @@
+// This component is from documentation. 
+
 import { PrismaClient } from "@prisma/client";
 
 /**

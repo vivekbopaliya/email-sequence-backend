@@ -11,10 +11,11 @@ const app = express();
 
 app.use(cors({
   origin: process.env.FRONTEND_URL,
-  credentials: true,
+  credentials: true, // For cookies
 }));
-app.use(express.json());
-app.use(cookieParser());
+
+app.use(express.json()); // Parse JSON bodies
+app.use(cookieParser()); // Parse cookies
 
 app.use('/auth', authRoutes);
 app.use('/workflow', workflowRoutes);
@@ -26,7 +27,7 @@ app.listen(PORT, () => {
 });
 
 
-
+// For auth middleware
 declare global {
   namespace Express {
     interface Request {

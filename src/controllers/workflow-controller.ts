@@ -5,6 +5,7 @@ import { ZodError } from 'zod';
 import { db } from '../lib/db';
 import { Node } from 'reactflow';
 
+// Check if workflow nodes are valid
 const validateWorkflowData = (nodes: Node[]): string | null => {
   const leadSourceNodes = nodes.filter((node) => node.type === 'leadSource');
   const coldEmailNodes = nodes.filter((node) => node.type === 'coldEmail');
@@ -21,17 +22,19 @@ const validateWorkflowData = (nodes: Node[]): string | null => {
 };
 
 export const saveWorkflow = async (
-  req: Request ,
+  req: Request,
   res: Response,
 ): Promise<any> => {
   try {
     const validatedData = WorkflowSchema.parse(req.body);
 
+    // Validate nodes before saving
     const validationError = validateWorkflowData(validatedData.nodes);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
 
+    // Save new workflow to DB
     const flow = await db.flow.create({
       data: {
         ...validatedData,
@@ -69,6 +72,7 @@ export const saveAndStartWorkflow = async (
       },
     });
 
+    // Schedule emails for the workflow
     await scheduleEmailsForWorkflow(validatedData.nodes as any[], validatedData.edges as any[], req.user.email, flow.id);
 
     res.status(201).json(flow);
@@ -83,6 +87,7 @@ export const saveAndStartWorkflow = async (
 
 export const getAllWorkflows = async (req: Request, res: Response): Promise<any> => {
   try {
+    // Fetch all workflows for the user
     const flows = await db.flow.findMany({
       where: { userId: req.user.id },
     });
@@ -92,7 +97,7 @@ export const getAllWorkflows = async (req: Request, res: Response): Promise<any>
   }
 };
 
-export const getOneWorkflow = async (req: Request, res: Response) : Promise<any>=> {
+export const getOneWorkflow = async (req: Request, res: Response): Promise<any> => {
   try {
     const flow = await db.flow.findFirst({
       where: {
@@ -115,7 +120,7 @@ export const updateWorkflow = async (
   req: Request,
   res: Response,
   next: NextFunction
-) : Promise<any>=> {
+): Promise<any> => {
   try {
     const { id } = req.params;
     const validatedData = WorkflowSchema.parse(req.body);
@@ -125,6 +130,7 @@ export const updateWorkflow = async (
       return res.status(400).json({ message: validationError });
     }
 
+    // Check if workflow exists and belongs to user
     const existingFlow = await db.flow.findFirst({
       where: {
         id,
@@ -138,6 +144,7 @@ export const updateWorkflow = async (
       });
     }
 
+    // Update the workflow
     const updatedFlow = await db.flow.update({
       where: { id },
       data: validatedData,
@@ -183,6 +190,7 @@ export const updateAndStartWorkflow = async (
       });
     }
 
+    // Cancel any existing scheduled emails
     await cancelScheduledEmails(id);
 
     const updatedFlow = await db.flow.update({
@@ -190,6 +198,7 @@ export const updateAndStartWorkflow = async (
       data: validatedData,
     });
 
+    // Start scheduling new emails
     await scheduleEmailsForWorkflow(validatedData.nodes as any[], validatedData.edges as any[], req.user.email, id);
 
     res.status(200).json(updatedFlow);
@@ -231,8 +240,10 @@ export const startScheduler = async (
       return res.status(400).json({ message: validationError });
     }
 
+    // Stop scheduled emails if they are running
     await cancelScheduledEmails(id);
 
+    // Reschedule them
     await scheduleEmailsForWorkflow(flow.nodes as any[], flow.edges as any[], req.user.email, id);
 
     res.status(200).json({ message: 'Scheduler started successfully.' });
@@ -263,6 +274,7 @@ export const stopSchduler = async (
       });
     }
 
+    // Stop scheduled emails and set status
     await cancelScheduledEmails(id);
 
     await db.flow.update({
@@ -302,6 +314,7 @@ export const deleteWorkflow = async (
 
     await cancelScheduledEmails(id);
 
+    // Remove workflow from DB
     await db.flow.delete({
       where: { id },
     });

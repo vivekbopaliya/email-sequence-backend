@@ -9,12 +9,10 @@ const validateWorkflowData = (nodes: Node[]): string | null => {
   const leadSourceNodes = nodes.filter((node) => node.type === 'leadSource');
   const coldEmailNodes = nodes.filter((node) => node.type === 'coldEmail');
 
-  // Check if any Lead Source has no contacts
   if (leadSourceNodes.some((node) => !node.data.contacts || node.data.contacts.length === 0)) {
     return 'All Lead Source nodes must have at least one email address.';
   }
 
-  // Check if any Cold Email node has empty subject or body
   if (coldEmailNodes.some((node) => !node.data.subject?.trim() || !node.data.body?.trim())) {
     return 'All Cold Email nodes must have a subject and body.';
   }
@@ -23,10 +21,9 @@ const validateWorkflowData = (nodes: Node[]): string | null => {
 };
 
 export const saveWorkflow = async (
-  req: Request & { user: { id: string; email: string } },
+  req: Request ,
   res: Response,
-  next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const validatedData = WorkflowSchema.parse(req.body);
 
@@ -53,10 +50,10 @@ export const saveWorkflow = async (
 };
 
 export const saveAndStartWorkflow = async (
-  req: Request & { user: { id: string; email: string } },
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const validatedData = WorkflowSchema.parse(req.body);
 
@@ -84,7 +81,7 @@ export const saveAndStartWorkflow = async (
   }
 };
 
-export const getAllWorkflows = async (req: Request & { user: { id: string } }, res: Response) => {
+export const getAllWorkflows = async (req: Request, res: Response): Promise<any> => {
   try {
     const flows = await db.flow.findMany({
       where: { userId: req.user.id },
@@ -95,7 +92,7 @@ export const getAllWorkflows = async (req: Request & { user: { id: string } }, r
   }
 };
 
-export const getOneWorkflow = async (req: Request & { user: { id: string } }, res: Response) => {
+export const getOneWorkflow = async (req: Request, res: Response) : Promise<any>=> {
   try {
     const flow = await db.flow.findFirst({
       where: {
@@ -115,10 +112,10 @@ export const getOneWorkflow = async (req: Request & { user: { id: string } }, re
 };
 
 export const updateWorkflow = async (
-  req: Request & { user: { id: string; email: string } },
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+) : Promise<any>=> {
   try {
     const { id } = req.params;
     const validatedData = WorkflowSchema.parse(req.body);
@@ -160,10 +157,10 @@ export const updateWorkflow = async (
 };
 
 export const updateAndStartWorkflow = async (
-  req: Request & { user: { id: string; email: string } },
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const { id } = req.params;
     const validatedData = WorkflowSchema.parse(req.body);
@@ -209,10 +206,10 @@ export const updateAndStartWorkflow = async (
 };
 
 export const startScheduler = async (
-  req: Request & { user: { id: string; email: string } },
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const { id } = req.params;
 
@@ -246,10 +243,10 @@ export const startScheduler = async (
 };
 
 export const stopSchduler = async (
-  req: Request & { user: { id: string; email: string } },
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const { id } = req.params;
 
@@ -283,10 +280,10 @@ export const stopSchduler = async (
 };
 
 export const deleteWorkflow = async (
-  req: Request & { user: { id: string } },
+  req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<any> => {
   try {
     const { id } = req.params;
 

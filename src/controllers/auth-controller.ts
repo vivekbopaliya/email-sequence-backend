@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, RequestHandler, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { LoginSchema, RegisterSchema } from '../types/auth-type';
@@ -6,7 +6,7 @@ import { ZodError } from 'zod';
 import { db } from '../lib/db';
 
 
-export const register = async (req: Request, res: Response) => {
+export const register = async (req: Request, res: Response) : Promise<any>=> {
   try {
     const validatedData = RegisterSchema.parse(req.body);
     
@@ -47,7 +47,7 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response): Promise<any> => {
   try {
     const validatedData = LoginSchema.parse(req.body);
 
@@ -91,4 +91,5 @@ export const login = async (req: Request, res: Response) => {
 export const logout = async(req: Request, res: Response) => {
   res.clearCookie('token');
   res.json({ message: 'Logged out successfully' });
+  
 };

@@ -4,6 +4,10 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth-route';
 import workflowRoutes from './routes/workflow-route';
+import emailTemplateRoutes from './routes/email-template-route';
+import leadSourceRoutes from './routes/lead-source-route';
+
+
 
 dotenv.config();
 
@@ -19,6 +23,10 @@ app.use(cookieParser()); // Parse cookies
 
 app.use('/auth', authRoutes);
 app.use('/workflow', workflowRoutes);
+app.use('/email-template', emailTemplateRoutes);
+app.use('/lead-source', leadSourceRoutes);
+
+
 
 const PORT = process.env.PORT || 3000;
 

@@ -1,3 +1,4 @@
+
 # Email Sequence Flows Automation Backend
 
 Frontend Repository: https://github.com/vivekbopaliya/email-sequence-frontend
@@ -46,6 +47,26 @@ This backend service powers an automated email sequence system that lets users v
 - createdAt: DateTime
 ```
 
+### LeadSource Model
+```
+- id: String (primary key, UUID)
+- name: String
+- contacts: Json (array of { name: String, email: String })
+- userId: String (foreign key to User)
+- createdAt: DateTime
+- updatedAt: DateTime
+```
+
+### EmailTemplate Model
+```
+- id: String (primary key, UUID)
+- name: String
+- subject: String
+- body: String
+- userId: String (foreign key to User)
+- createdAt: DateTime
+- updatedAt: DateTime
+```
 
 ## API Routes
 
@@ -65,8 +86,19 @@ This backend service powers an automated email sequence system that lets users v
 - `POST /workflow/stop-scheduler/:id` - Stop a running workflow and cancel pending emails
 - `DELETE /workflow/delete/:id` - Delete a workflow and cancel all associated emails
 
+### Lead Source Routes
+- `POST /lead-source/create` - Create a new lead source
+- `GET /lead-source/getAll` - Retrieve all lead sources for the current user
+- `PUT /lead-source/update/:id` - Update a lead source
+- `DELETE /lead-source/delete/:id` - Delete a lead source
 
-# Required environment variables
+### Email Template Routes
+- `POST /email-template/create` - Create a new email template
+- `GET /email-template/getAll` - Retrieve all email templates for the current user
+- `PUT /email-template/update/:id` - Update an email template
+- `DELETE /email-template/delete/:id` - Delete an email template
+
+# Required Environment Variables
 ```
 DATABASE_URL=your-mongodb-url
 JWT_SECRET=your-secure-jwt-secret
@@ -76,18 +108,13 @@ SMTP_PASS=your-app-password
 SMTP_PORT=465
 ```
 - Ensure your Gmail account has 2FA enabled before creating an app password for SMTP authentication
-
-- Don't know how to create an app password? Follow [this tutorial.](https://bestsoftware.medium.com/how-to-create-an-app-password-on-gmail-e00eff3af4e0)
-
-
-
+- Don’t know how to create an app password? Follow [this tutorial](https://bestsoftware.medium.com/how-to-create-an-app-password-on-gmail-e00eff3af4e0).
 
 ## Running the Application
 
 ### Before You Start
 - Make sure you have [Bun](https://bun.sh/) installed on your computer
 - You'll need to set up the frontend from [this link](https://github.com/vivekbopaliya/email-sequence-frontend)
-
 
 ```bash
 # Install dependencies
@@ -106,13 +133,9 @@ bun run dev
 bun start
 ```
 
-
 ### Things to Make Sure
-
--  Both the frontend (website) and backend (server) need to be running simultaneously for the application to work properly.
-
-- Verify that MongoDB is running and accessible via the provided DATABASE_URL
-
+- Both the frontend (website) and backend (server) need to be running simultaneously for the application to work properly.
+- Verify that MongoDB is running and accessible via the provided `DATABASE_URL`.
 
 # How Things Work Exactly?
 
@@ -120,17 +143,17 @@ bun start
 The system processes three types of nodes from the ReactFlow frontend:
 
 #### 1. Lead Source Node
-Contains a list of email recipients:
+References a lead source by ID, which contains a list of email recipients:
 ```javascript
 {
     id: "node1",
     type: "leadSource",
     data: {
-        name: "New Leads",
-        contacts: ["john@example.com", "jane@example.com"]
+        leadSourceId: "uuid-of-lead-source"
     }
 }
 ```
+- The backend fetches the lead source data (including contacts) using `leadSourceId`.
 
 #### 2. Wait/Delay Node
 Specifies how long to wait between emails:
@@ -149,80 +172,79 @@ Specifies how long to wait between emails:
 ```
 
 #### 3. Email Node
-Contains the actual email content:
+References an email template by ID, which contains the email content:
 ```javascript
 {
     id: "node3",
     type: "coldEmail",
     data: {
-        subject: "Follow-up on our conversation",
-        body: "<p>Hi there,</p><p>Just checking in...</p>"
+        emailTemplateId: "uuid-of-email-template"
     }
 }
 ```
+- The backend fetches the email template data (subject and body) using `emailTemplateId`.
 
 ## How Email Scheduling Works?
 
 When a workflow is started:
 
-1. The system looks for all **Lead Source nodes** to get the list of recipients
-2. For each recipient, it finds all paths to **Email nodes**
-3. For each path, it calculates the total delay by adding up all **Wait nodes** along the path
-4. It schedules each email using Agenda.js with the calculated delay
-5. The system records each scheduled email in the database and links it to the workflow
-6. The workflow status is updated to "RUNNING"
+1. The system looks for all **Lead Source nodes** and retrieves the associated `LeadSource` data (including contacts) from the database using `leadSourceId`.
+2. For each contact in the retrieved lead sources, it finds all paths to **Email nodes**.
+3. For each email node, it retrieves the `EmailTemplate` data (subject and body) from the database using `emailTemplateId`.
+4. For each path, it calculates the total delay by adding up all **Wait nodes** along the path.
+5. It schedules each email using Agenda.js with the calculated delay, using the fetched subject and body from the email template.
+6. The system records each scheduled email in the database and links it to the workflow.
+7. The workflow status is updated to "RUNNING".
 
 When all emails are sent, the workflow status changes to "COMPLETED". If a workflow is stopped manually, all pending emails are canceled.
 
 ## The Email Scheduling Process (Step by Step)
 
 1. **Workflow Creation**:
-   - User designs a workflow in the frontend by connecting Lead Source → Wait → Email nodes
-   - The frontend sends this data to the backend as JSON
+   - User designs a workflow in the frontend by connecting Lead Source → Wait → Email nodes.
+   - The frontend sends this data to the backend as JSON, with only `leadSourceId` and `emailTemplateId` in the node data.
 
 2. **Validation**:
-   - Backend checks that Lead Source nodes have contacts
-   - Verifies Email nodes have subject and body content
+   - Backend fetches `LeadSource` data by `leadSourceId` and checks that it has contacts with valid email addresses.
+   - Fetches `EmailTemplate` data by `emailTemplateId` and verifies it has a subject and body.
 
 3. **Path Finding**:
-   - For each contact in each Lead Source node
-   - The system traces all possible paths through the workflow that lead to Email nodes
-   - It calculates the total delay time by summing all Wait nodes in each path
+   - For each contact in each retrieved `LeadSource`, the system traces all possible paths through the workflow that lead to `Email` nodes.
+   - It calculates the total delay time by summing all `Wait` nodes in each path.
 
 4. **Email Scheduling**:
    - For each valid path, the system:
-     - Calculates when the email should be sent (current time + total delay)
-     - Creates a job in Agenda.js to send the email at that time
-     - Stores the job ID in the ScheduledEmail table
+     - Retrieves the `EmailTemplate` data using `emailTemplateId`.
+     - Calculates when the email should be sent (current time + total delay).
+     - Creates a job in Agenda.js to send the email at that time with the fetched subject and body.
+     - Stores the job ID in the `ScheduledEmail` table.
 
 5. **Email Sending**:
-   - When the scheduled time arrives, Agenda.js runs the job
-   - The system sends the email using Nodemailer
-   - After sending, it checks if there are any remaining emails in the workflow
-   - If no emails remain, it updates the workflow status to "COMPLETED"
+   - When the scheduled time arrives, Agenda.js runs the job.
+   - The system sends the email using Nodemailer.
+   - After sending, it checks if there are any remaining emails in the workflow.
+   - If no emails remain, it updates the workflow status to "COMPLETED".
 
 6. **Workflow Management**:
-   - Users can view all their workflows and their current status
-   - They can stop a running workflow (cancels all pending emails)
-   - They can update a workflow (if running, it cancels existing emails and reschedules)
-   - They can delete a workflow (also removes all scheduled emails)
+   - Users can view all their workflows and their current status.
+   - They can stop a running workflow (cancels all pending emails).
+   - They can update a workflow (if running, it cancels existing emails and reschedules with updated data).
+   - They can delete a workflow (also removes all scheduled emails).
 
 ## Example Flow Execution
 
 Imagine a workflow with:
-- **Lead Source**: Contains 2 contacts (alice@example.com, bob@example.com)
-- **Wait Node**: Set to 2 days delay
-- **Email Node**: Contains a follow-up message
+- **Lead Source Node**: Contains `leadSourceId` referencing a lead source with 2 contacts (`alice@example.com`, `bob@example.com`).
+- **Wait Node**: Set to 2 days delay.
+- **Email Node**: Contains `emailTemplateId` referencing a template with a follow-up message.
 
 When the workflow starts:
-1. System finds 2 contacts in the Lead Source
-2. For each contact, it calculates:
-   - Send time = current time + 2 days
-3. It schedules 2 emails (one for each contact) to be sent in 2 days
-4. These scheduled emails are recorded in the database
-5. The workflow status is set to "RUNNING"
-6. After 2 days, emails are sent automatically
-7. After the last email sends, workflow status changes to "COMPLETED"
-
-
-
+1. System fetches the `LeadSource` by `leadSourceId` and finds 2 contacts.
+2. Fetches the `EmailTemplate` by `emailTemplateId` to get the subject and body.
+3. For each contact, it calculates:
+   - Send time = current time + 2 days.
+4. It schedules 2 emails (one for each contact) to be sent in 2 days using the template’s subject and body.
+5. These scheduled emails are recorded in the database.
+6. The workflow status is set to "RUNNING".
+7. After 2 days, emails are sent automatically.
+8. After the last email sends, workflow status changes to "COMPLETED".

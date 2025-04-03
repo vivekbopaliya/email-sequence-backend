@@ -5,36 +5,61 @@ import { ZodError } from 'zod';
 import { db } from '../lib/db';
 import { Node } from 'reactflow';
 
-// Check if workflow nodes are valid
-const validateWorkflowData = (nodes: Node[]): string | null => {
+
+const validateWorkflowData = async (nodes: Node[]): Promise<string | null> => {
   const leadSourceNodes = nodes.filter((node) => node.type === 'leadSource');
   const coldEmailNodes = nodes.filter((node) => node.type === 'coldEmail');
 
-  if (leadSourceNodes.some((node) => !node.data.contacts || node.data.contacts.length === 0)) {
-    return 'All Lead Source nodes must have at least one email address.';
+  // Validate lead source nodes
+  for (const node of leadSourceNodes) {
+    const leadSourceId = node.data.leadSourceId;
+    if (!leadSourceId) {
+      return 'All Lead Source nodes must have a selected lead source.';
+    }
+
+    const leadSource = await db.leadSource.findUnique({
+      where: { id: leadSourceId },
+      select: { contacts: true },
+    });
+
+    if (!leadSource || !leadSource.contacts ) {
+      return 'All Lead Source nodes must have at least one contact with an email address.';
+    }
+    if ((leadSource.contacts as any[]).some((contact: any) => !contact.email || typeof contact.email !== 'string' || !contact.email.trim())) {
+      return 'All contacts in Lead Source nodes must have a valid email address.';
+    }
   }
 
-  if (coldEmailNodes.some((node) => !node.data.subject?.trim() || !node.data.body?.trim())) {
-    return 'All Cold Email nodes must have a subject and body.';
+  // Validate cold email nodes
+  for (const node of coldEmailNodes) {
+    const emailTemplateId = node.data.emailTemplateId;
+    if (!emailTemplateId) {
+      return 'All Cold Email nodes must have a selected email template.';
+    }
+
+    const emailTemplate = await db.emailTemplate.findUnique({
+      where: { id: emailTemplateId },
+      select: { subject: true, body: true },
+    });
+
+    if (!emailTemplate || !emailTemplate.subject?.trim() || !emailTemplate.body?.trim()) {
+      return 'All Cold Email nodes must have a valid email template with a subject and body.';
+    }
   }
 
   return null;
 };
 
-export const saveWorkflow = async (
-  req: Request,
-  res: Response,
-): Promise<any> => {
+
+// Update controller functions to use async validation
+export const saveWorkflow = async (req: Request, res: Response): Promise<any> => {
   try {
     const validatedData = WorkflowSchema.parse(req.body);
-
-    // Validate nodes before saving
-    const validationError = validateWorkflowData(validatedData.nodes);
+    const validationError = await validateWorkflowData(validatedData.nodes);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
 
-    // Save new workflow to DB
     const flow = await db.flow.create({
       data: {
         ...validatedData,
@@ -52,15 +77,10 @@ export const saveWorkflow = async (
   }
 };
 
-export const saveAndStartWorkflow = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<any> => {
+export const saveAndStartWorkflow = async (req: Request, res: Response): Promise<any> => {
   try {
     const validatedData = WorkflowSchema.parse(req.body);
-
-    const validationError = validateWorkflowData(validatedData.nodes);
+    const validationError = await validateWorkflowData(validatedData.nodes);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -72,7 +92,6 @@ export const saveAndStartWorkflow = async (
       },
     });
 
-    // Schedule emails for the workflow
     await scheduleEmailsForWorkflow(validatedData.nodes as any[], validatedData.edges as any[], req.user.email, flow.id);
 
     res.status(201).json(flow);
@@ -125,7 +144,7 @@ export const updateWorkflow = async (
     const { id } = req.params;
     const validatedData = WorkflowSchema.parse(req.body);
 
-    const validationError = validateWorkflowData(validatedData.nodes);
+    const validationError = await validateWorkflowData(validatedData.nodes);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -172,7 +191,7 @@ export const updateAndStartWorkflow = async (
     const { id } = req.params;
     const validatedData = WorkflowSchema.parse(req.body);
 
-    const validationError = validateWorkflowData(validatedData.nodes);
+    const validationError =await validateWorkflowData(validatedData.nodes);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }
@@ -235,7 +254,7 @@ export const startScheduler = async (
       });
     }
 
-    const validationError = validateWorkflowData(flow.nodes as unknown as Node[]);
+    const validationError = await validateWorkflowData(flow.nodes as unknown as Node[]);
     if (validationError) {
       return res.status(400).json({ message: validationError });
     }

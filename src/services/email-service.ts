@@ -9,7 +9,7 @@ const agenda = new Agenda({ db: { address: process.env.DATABASE_URL! } });
 // Configure email transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
-  port: parseInt(process.env.SMTP_PORT!),
+  port: parseInt(process.env.SMTP_PORT!), 
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -57,7 +57,6 @@ export const scheduleEmail = async (
   sendAt: Date,
   flowId: string
 ): Promise<string> => {
-  // Schedule a single email
   const job = await agenda.schedule(sendAt, 'send email', {
     currentUserEmail,
     recipientUserEmail,
@@ -72,7 +71,6 @@ export const scheduleEmail = async (
 
   const flow = await db.flow.findUnique({ where: { id: flowId } });
 
-  // Update flow status if needed
   if (flow && flow.status !== 'RUNNING') {
     await db.flow.update({
       where: { id: flowId },
@@ -93,16 +91,38 @@ export const scheduleEmailsForWorkflow = async (
   const leadSourceNodes = nodes.filter((node) => node.type === 'leadSource');
   const emailNodes = nodes.filter((node) => node.type === 'coldEmail');
 
-  for (const leadSource of leadSourceNodes) {
-    const contacts = leadSource.data.contacts || [];
+  for (const leadSourceNode of leadSourceNodes) {
+    const leadSourceId = leadSourceNode.data.leadSourceId;
+    const leadSource = await db.leadSource.findUnique({
+      where: { id: leadSourceId },
+      select: { contacts: true },
+    });
+
+    if (!leadSource || !leadSource.contacts) {
+      console.warn(`Lead source ${leadSourceId} not found or has no contacts`);
+      continue;
+    }
+
+    const contacts = leadSource.contacts as { name: string; email: string }[];
 
     for (const contact of contacts) {
+      const recipientEmail = contact.email;
       for (const emailNode of emailNodes) {
+        const emailTemplateId = emailNode.data.emailTemplateId;
+        const emailTemplate = await db.emailTemplate.findUnique({
+          where: { id: emailTemplateId },
+          select: { subject: true, body: true },
+        });
+
+        if (!emailTemplate) {
+          console.warn(`Email template ${emailTemplateId} not found`);
+          continue;
+        }
+
         let totalDelayMs = 0;
         const pathToEmail = [];
-        let currentSource = leadSource.id;
+        let currentSource = leadSourceNode.id;
 
-        // Calculate delay by traversing nodes
         while (true) {
           const nextEdge = edges.find((edge) => edge.source === currentSource);
           if (!nextEdge) break;
@@ -127,14 +147,13 @@ export const scheduleEmailsForWorkflow = async (
 
         if (pathToEmail.some((node) => node.id === emailNode.id)) {
           const sendAt = new Date(Date.now() + totalDelayMs);
-          console.log(`Scheduling email for ${contact} at ${sendAt}...`);
+          console.log(`Scheduling email for ${recipientEmail} at ${sendAt}...`);
 
-          // Schedule and log the email
           const jobId = await scheduleEmail(
             userEmail,
-            contact,
-            emailNode.data.subject,
-            emailNode.data.body,
+            recipientEmail,
+            emailTemplate.subject,
+            emailTemplate.body,
             sendAt,
             flowId
           );
@@ -146,12 +165,11 @@ export const scheduleEmailsForWorkflow = async (
               sendAt,
             },
           });
-          console.log(`Email job ${jobId} scheduled for ${contact}!`);
+          console.log(`Email job ${jobId} scheduled for ${recipientEmail}!`);
         }
       }
     }
   }
-
 };
 
 export const cancelScheduledEmails = async (flowId: string): Promise<void> => {
@@ -159,7 +177,6 @@ export const cancelScheduledEmails = async (flowId: string): Promise<void> => {
     where: { flowId },
   });
 
-  // Cancel each scheduled job
   for (const scheduledEmail of scheduledEmails) {
     const data = await agenda.cancel({
       _id: new ObjectId(scheduledEmail.jobId),
@@ -172,7 +189,7 @@ export const cancelScheduledEmails = async (flowId: string): Promise<void> => {
       where: { id: scheduledEmail.id },
     });
   }
-    console.log(`All emails canceled for flow ${flowId}!`);
+  console.log(`All emails canceled for flow ${flowId}!`);
 };
 
 // Start the scheduler

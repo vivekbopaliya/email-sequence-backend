@@ -99,6 +99,35 @@ export const login = async (req: Request, res: Response): Promise<any> => {
   }
 };
 
+export const getCurrentUser = async (req: Request, res: Response): Promise<any> => {
+  try {
+    // Grab token from cookies
+    const token = req.cookies.token;
+
+    if (!token) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    // Verify token with secret
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+
+    const user = await db.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, email: true }, // Return minimal user data
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    // Return user data to confirm authentication
+    res.status(200).json({ id: user.id, email: user.email });
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
 export const logout = async (req: Request, res: Response) => {
   // Clear token cookie
   res.clearCookie('token');

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, logout } from '../controllers/auth-controller';
+import { register, login, logout, getCurrentUser } from '../controllers/auth-controller';
 
 const router = Router();
 
@@ -9,5 +9,7 @@ router.post('/register', register);
 router.post('/login', login);
 // User logout
 router.post('/logout', logout);
+// Get current user
+router.get('/me', getCurrentUser);
 
 export default router;

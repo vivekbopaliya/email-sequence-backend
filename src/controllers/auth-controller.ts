@@ -130,6 +130,11 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<any> 
 
 export const logout = async (req: Request, res: Response) => {
   // Clear token cookie
-  res.clearCookie('token');
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none'
+  });
+  
   res.json({ message: 'Logged out successfully' });
 };

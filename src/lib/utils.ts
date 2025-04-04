@@ -7,6 +7,12 @@ export const validateWorkflowData = async (nodes: Node[]): Promise<string | null
     const leadSourceNodes = nodes.filter((node) => node.type === 'leadSource');
     const coldEmailNodes = nodes.filter((node) => node.type === 'coldEmail');
   
+    if(!leadSourceNodes || leadSourceNodes.length === 0) {
+      return 'At least one Lead Source node is required.';
+    }
+    if(!coldEmailNodes || coldEmailNodes.length === 0) {
+      return 'At least one Cold Email node is required.';
+    }
     // Validate lead source nodes
     for (const node of leadSourceNodes) {
       const leadSourceId = node.data.leadSourceId;

@@ -12,9 +12,13 @@ const router = Router();
 
 router.use(auth);
 
+// Create a new lead source
 router.post('/create', createLeadSource);
+// Get all lead sources
 router.get('/getAll', getLeadSources);
+// Update a lead source
 router.put('/update/:id', updateLeadSource);
+// Delete a lead source
 router.delete('/delete/:id', deleteLeadSource);
 
 export default router;

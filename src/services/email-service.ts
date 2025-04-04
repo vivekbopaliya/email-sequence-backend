@@ -3,10 +3,8 @@ import Agenda, { Job } from 'agenda';
 import { db } from '../lib/db';
 import { ObjectId } from 'mongodb';
 
-// Set up Agenda for scheduling
 const agenda = new Agenda({ db: { address: process.env.DATABASE_URL! } });
 
-// Configure email transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   port: parseInt(process.env.SMTP_PORT!), 
@@ -40,6 +38,7 @@ agenda.define('send email', async (job: Job) => {
     if (pendingEmails === 0) {
       await db.flow.update({
         where: { id: flowId },
+        // Update flow status to COMPLETED if no pending emails
         data: { status: 'COMPLETED' },
       });
       console.log(`Flow ${flowId} completed, no pending emails.`);
@@ -49,6 +48,7 @@ agenda.define('send email', async (job: Job) => {
   }
 });
 
+
 export const scheduleEmail = async (
   currentUserEmail: string,
   recipientUserEmail: string,
@@ -57,6 +57,7 @@ export const scheduleEmail = async (
   sendAt: Date,
   flowId: string
 ): Promise<string> => {
+  // Start the job scheduler
   const job = await agenda.schedule(sendAt, 'send email', {
     currentUserEmail,
     recipientUserEmail,
@@ -71,6 +72,7 @@ export const scheduleEmail = async (
 
   const flow = await db.flow.findUnique({ where: { id: flowId } });
 
+  // Update flow status to RUNNING if it is not already running
   if (flow && flow.status !== 'RUNNING') {
     await db.flow.update({
       where: { id: flowId },
@@ -82,95 +84,6 @@ export const scheduleEmail = async (
   return job.attrs._id.toString();
 };
 
-export const scheduleEmailsForWorkflow = async (
-  nodes: any[],
-  edges: any[],
-  userEmail: string,
-  flowId: string
-): Promise<void> => {
-  const leadSourceNodes = nodes.filter((node) => node.type === 'leadSource');
-  const emailNodes = nodes.filter((node) => node.type === 'coldEmail');
-
-  for (const leadSourceNode of leadSourceNodes) {
-    const leadSourceId = leadSourceNode.data.leadSourceId;
-    const leadSource = await db.leadSource.findUnique({
-      where: { id: leadSourceId },
-      select: { contacts: true },
-    });
-
-    if (!leadSource || !leadSource.contacts) {
-      console.warn(`Lead source ${leadSourceId} not found or has no contacts`);
-      continue;
-    }
-
-    const contacts = leadSource.contacts as { name: string; email: string }[];
-
-    for (const contact of contacts) {
-      const recipientEmail = contact.email;
-      for (const emailNode of emailNodes) {
-        const emailTemplateId = emailNode.data.emailTemplateId;
-        const emailTemplate = await db.emailTemplate.findUnique({
-          where: { id: emailTemplateId },
-          select: { subject: true, body: true },
-        });
-
-        if (!emailTemplate) {
-          console.warn(`Email template ${emailTemplateId} not found`);
-          continue;
-        }
-
-        let totalDelayMs = 0;
-        const pathToEmail = [];
-        let currentSource = leadSourceNode.id;
-
-        while (true) {
-          const nextEdge = edges.find((edge) => edge.source === currentSource);
-          if (!nextEdge) break;
-
-          const nextNode = nodes.find((node) => node.id === nextEdge.target);
-          if (!nextNode) break;
-
-          if (nextNode.type === 'wait') {
-            const delay = nextNode.data.delay || { days: 0, hours: 0, minutes: 0 };
-            const delayMs =
-              (parseInt(delay.days) || 0) * 24 * 60 * 60 * 1000 +
-              (parseInt(delay.hours) || 0) * 60 * 60 * 1000 +
-              (parseInt(delay.minutes) || 0) * 60 * 1000;
-            totalDelayMs += delayMs;
-            pathToEmail.push(nextNode);
-          } else if (nextNode.id === emailNode.id) {
-            pathToEmail.push(nextNode);
-            break;
-          }
-          currentSource = nextNode.id;
-        }
-
-        if (pathToEmail.some((node) => node.id === emailNode.id)) {
-          const sendAt = new Date(Date.now() + totalDelayMs);
-          console.log(`Scheduling email for ${recipientEmail} at ${sendAt}...`);
-
-          const jobId = await scheduleEmail(
-            userEmail,
-            recipientEmail,
-            emailTemplate.subject,
-            emailTemplate.body,
-            sendAt,
-            flowId
-          );
-
-          await db.scheduledEmail.create({
-            data: {
-              flowId,
-              jobId,
-              sendAt,
-            },
-          });
-          console.log(`Email job ${jobId} scheduled for ${recipientEmail}!`);
-        }
-      }
-    }
-  }
-};
 
 export const cancelScheduledEmails = async (flowId: string): Promise<void> => {
   const scheduledEmails = await db.scheduledEmail.findMany({
@@ -178,7 +91,8 @@ export const cancelScheduledEmails = async (flowId: string): Promise<void> => {
   });
 
   for (const scheduledEmail of scheduledEmails) {
-    const data = await agenda.cancel({
+    // Cancel the job in the agenda
+  const data = await agenda.cancel({
       _id: new ObjectId(scheduledEmail.jobId),
     });
     if (data === 0) {
@@ -191,6 +105,5 @@ export const cancelScheduledEmails = async (flowId: string): Promise<void> => {
   }
   console.log(`All emails canceled for flow ${flowId}!`);
 };
-
 // Start the scheduler
 agenda.start();

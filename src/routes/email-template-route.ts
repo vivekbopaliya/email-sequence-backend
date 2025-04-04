@@ -13,9 +13,13 @@ const router = Router();
 // Protect all routes with auth middleware
 router.use(auth);
 
+// Create template
 router.post('/create', createEmailTemplate);
+// Get all the templates
 router.get('/getAll', getEmailTemplates);
+// Update template
 router.put('/update/:id', updateEmailTemplate);
+// Delete template
 router.delete('/delete/:id', deleteEmailTemplate);
 
 export default router;

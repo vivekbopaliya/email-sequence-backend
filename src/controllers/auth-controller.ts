@@ -5,12 +5,11 @@ import { LoginSchema, RegisterSchema } from '../types/auth-type';
 import { ZodError } from 'zod';
 import { db } from '../lib/db';
 
+// Register User
 export const register = async (req: Request, res: Response): Promise<any> => {
   try {
-    // Validate incoming data
     const validatedData = RegisterSchema.parse(req.body);
     
-    // Check if user already exists
     const existingUser = await db.user.findUnique({
       where: { email: validatedData.email },
     });
@@ -19,10 +18,8 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       return res.status(401).json({ message: 'User already exists' });
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(validatedData.password, 10);
 
-    // Create new user
     const user = await db.user.create({
       data: {
         email: validatedData.email,
@@ -30,7 +27,6 @@ export const register = async (req: Request, res: Response): Promise<any> => {
       },
     });
 
-    // Generate JWT token
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, {
       expiresIn: '24h',
     });
@@ -52,12 +48,11 @@ export const register = async (req: Request, res: Response): Promise<any> => {
   }
 };
 
+// Login User
 export const login = async (req: Request, res: Response): Promise<any> => {
   try {
-    // Validate login data
     const validatedData = LoginSchema.parse(req.body);
 
-    // Find user by email
     const user = await db.user.findUnique({
       where: { email: validatedData.email },
     });
@@ -66,7 +61,6 @@ export const login = async (req: Request, res: Response): Promise<any> => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Check password
     const validPassword = await bcrypt.compare(
       validatedData.password,
       user.password
@@ -76,7 +70,6 @@ export const login = async (req: Request, res: Response): Promise<any> => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // Create token with user info
     const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET!, {
       expiresIn: '24h',
     });
@@ -99,28 +92,26 @@ export const login = async (req: Request, res: Response): Promise<any> => {
   }
 };
 
+// Get Current Login User From Cookie
 export const getCurrentUser = async (req: Request, res: Response): Promise<any> => {
   try {
-    // Grab token from cookies
     const token = req.cookies.token;
 
     if (!token) {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    // Verify token with secret
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
 
     const user = await db.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, email: true }, // Return minimal user data
+      select: { id: true, email: true }, 
     });
 
     if (!user) {
       return res.status(401).json({ message: 'User not found' });
     }
 
-    // Return user data to confirm authentication
     res.status(200).json({ id: user.id, email: user.email });
   } catch (error) {
     console.error('Error verifying token:', error);
@@ -129,7 +120,6 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<any> 
 };
 
 export const logout = async (req: Request, res: Response) => {
-  // Clear token cookie
   res.clearCookie('token', {
     httpOnly: true,
     secure: true,

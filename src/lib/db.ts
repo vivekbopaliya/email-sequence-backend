@@ -1,4 +1,4 @@
-// This component is from documentation. 
+// This component is copied from documentation. 
 
 import { PrismaClient } from "@prisma/client";
 

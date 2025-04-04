@@ -51,7 +51,7 @@ export const updateEmailTemplate = async (req: Request, res: Response): Promise<
     const template = await db.emailTemplate.update({
       where: { 
         id,
-        userId: req.user.id, // Ensure user can only update their own templates
+        userId: req.user.id, 
       },
       data: validatedData,
     });
@@ -76,7 +76,7 @@ export const deleteEmailTemplate = async (req: Request, res: Response): Promise<
     await db.emailTemplate.delete({
       where: { 
         id,
-        userId: req.user.id, // Ensure user can only delete their own templates
+        userId: req.user.id, 
       },
     });
     res.status(200).json({message:"Email template deleted successfully"})

@@ -1,7 +1,6 @@
-// File: controllers/lead-source-controller.ts
 import { Request, Response } from 'express';
-import { db } from '../lib/db';
 import { z } from 'zod';
+import { db } from '../lib/db';
 
 const LeadSourceSchema = z.object({
   name: z.string().min(1, 'Lead source name is required'),
